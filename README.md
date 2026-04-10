@@ -8,7 +8,7 @@ Go + SQLite で実装した Web サイト死活監視ツールの MVP です。
 - 過剰な依存を避け、標準ライブラリ中心で保守しやすくする
 
 ## 主な機能
-- 監視対象（Monitor）の CRUD
+- 監視対象（Monitor）の CRUD（API + 画面フォーム）
 - 定期 HTTP GET チェック（timeout 制御あり）
 - 最新ステータス（UP/DOWN）、応答時間、最終チェック時刻、失敗理由の保存
 - チェック履歴保存と参照
@@ -66,6 +66,7 @@ Go + SQLite で実装した Web サイト死活監視ツールの MVP です。
 
 ### 前提
 - Go 1.23+
+- sqlite3 コマンドが利用可能であること（ローカル実行時に使用）
 
 ### 起動
 ```bash
@@ -74,7 +75,7 @@ make run
 ```
 
 起動後:
-- UI: `http://localhost:8080/`
+- UI: `http://localhost:8080/`（追加/編集/削除/手動チェックを実行可能）
 - healthz: `http://localhost:8080/healthz`
 
 ### 環境変数
