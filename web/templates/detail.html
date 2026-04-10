@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>monitor detail</title></head>
+<body>
+<p><a href="/">←一覧へ</a></p>
+<h1>{{.Monitor.Name}}</h1>
+<ul>
+<li>ID: {{.Monitor.ID}}</li>
+<li>URL: {{.Monitor.URL}}</li>
+<li>24時間成功率: {{printf "%.2f" .SuccessRate24}}% ({{.Total24}}件)</li>
+</ul>
+<h2>直近履歴</h2>
+<table border="1" cellpadding="6">
+<tr><th>CheckedAt</th><th>Status</th><th>Code</th><th>Response(ms)</th><th>Error</th></tr>
+{{range .Results}}
+<tr><td>{{.CheckedAt}}</td><td>{{.Status}}</td><td>{{if .StatusCode}}{{.StatusCode}}{{else}}-{{end}}</td><td>{{.ResponseTimeMS}}</td><td>{{if .ErrorMessage}}{{.ErrorMessage}}{{else}}-{{end}}</td></tr>
+{{end}}
+</table>
+</body></html>
