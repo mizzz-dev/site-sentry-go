@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -116,6 +117,24 @@ func (h *HTTPHandler) monitorByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.listResults(w, r, id)
+	case "edit":
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.editMonitorPage(w, r, id)
+	case "update":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.updateMonitorForm(w, r, id)
+	case "delete":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.deleteMonitorForm(w, r, id)
 	default:
 		http.NotFound(w, r)
 	}
@@ -131,38 +150,44 @@ func (h *HTTPHandler) listMonitorsJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, items)
 }
+
 func (h *HTTPHandler) createMonitor(w http.ResponseWriter, r *http.Request) {
-	var in model.MonitorInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		jsonError(w, http.StatusBadRequest, err)
+	in, err := decodeMonitorInput(r)
+	if err != nil {
+		h.respondByContentType(w, r, http.StatusBadRequest, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
 	defer cancel()
-	created, err := h.svc.CreateMonitor(ctx, in)
+	_, err = h.svc.CreateMonitor(ctx, in)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, service.ErrValidation) {
 			status = http.StatusBadRequest
 		}
-		jsonError(w, status, err)
+		h.respondByContentType(w, r, status, err)
 		return
 	}
-	jsonResponse(w, http.StatusCreated, created)
+	if isHTMLRequest(r) {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	jsonResponse(w, http.StatusCreated, map[string]string{"status": "created"})
 }
+
 func (h *HTTPHandler) getMonitor(w http.ResponseWriter, r *http.Request, id int64) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
 	defer cancel()
 	detail, err := h.svc.GetDetail(ctx, id, h.cfg.ResultLimit)
 	if err != nil {
 		if service.IsNotFound(err) {
-			jsonError(w, http.StatusNotFound, err)
+			h.respondByContentType(w, r, http.StatusNotFound, err)
 			return
 		}
-		jsonError(w, http.StatusInternalServerError, err)
+		h.respondByContentType(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	if strings.Contains(r.Header.Get("Accept"), "text/html") {
+	if isHTMLRequest(r) {
 		if err := h.templates.ExecuteTemplate(w, "detail.html", detail); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -170,10 +195,28 @@ func (h *HTTPHandler) getMonitor(w http.ResponseWriter, r *http.Request, id int6
 	}
 	jsonResponse(w, http.StatusOK, detail)
 }
+
+func (h *HTTPHandler) editMonitorPage(w http.ResponseWriter, r *http.Request, id int64) {
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
+	defer cancel()
+	detail, err := h.svc.GetDetail(ctx, id, h.cfg.ResultLimit)
+	if err != nil {
+		if service.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.templates.ExecuteTemplate(w, "edit.html", detail.Monitor); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (h *HTTPHandler) updateMonitor(w http.ResponseWriter, r *http.Request, id int64) {
-	var in model.MonitorInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		jsonError(w, http.StatusBadRequest, err)
+	in, err := decodeMonitorInput(r)
+	if err != nil {
+		h.respondByContentType(w, r, http.StatusBadRequest, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
@@ -181,18 +224,38 @@ func (h *HTTPHandler) updateMonitor(w http.ResponseWriter, r *http.Request, id i
 	updated, err := h.svc.UpdateMonitor(ctx, id, in)
 	if err != nil {
 		if service.IsNotFound(err) {
-			jsonError(w, http.StatusNotFound, err)
+			h.respondByContentType(w, r, http.StatusNotFound, err)
 			return
 		}
 		if errors.Is(err, service.ErrValidation) {
-			jsonError(w, http.StatusBadRequest, err)
+			h.respondByContentType(w, r, http.StatusBadRequest, err)
 			return
 		}
-		jsonError(w, http.StatusInternalServerError, err)
+		h.respondByContentType(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	jsonResponse(w, http.StatusOK, updated)
 }
+
+func (h *HTTPHandler) updateMonitorForm(w http.ResponseWriter, r *http.Request, id int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	in, err := monitorInputFromForm(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
+	defer cancel()
+	if _, err := h.svc.UpdateMonitor(ctx, id, in); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/monitors/%d", id), http.StatusSeeOther)
+}
+
 func (h *HTTPHandler) deleteMonitor(w http.ResponseWriter, r *http.Request, id int64) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
 	defer cancel()
@@ -206,21 +269,37 @@ func (h *HTTPHandler) deleteMonitor(w http.ResponseWriter, r *http.Request, id i
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *HTTPHandler) deleteMonitorForm(w http.ResponseWriter, r *http.Request, id int64) {
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
+	defer cancel()
+	if err := h.svc.DeleteMonitor(ctx, id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 func (h *HTTPHandler) runManualCheck(w http.ResponseWriter, r *http.Request, id int64) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(30)*time.Second)
 	defer cancel()
 	res, err := h.svc.RunCheck(ctx, id)
 	if err != nil {
 		if service.IsNotFound(err) {
-			jsonError(w, http.StatusNotFound, err)
+			h.respondByContentType(w, r, http.StatusNotFound, err)
 			return
 		}
-		jsonError(w, http.StatusInternalServerError, err)
+		h.respondByContentType(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	service.LogCheckResult(res)
+	if isHTMLRequest(r) {
+		http.Redirect(w, r, fmt.Sprintf("/monitors/%d", id), http.StatusSeeOther)
+		return
+	}
 	jsonResponse(w, http.StatusOK, res)
 }
+
 func (h *HTTPHandler) listResults(w http.ResponseWriter, r *http.Request, id int64) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.RequestTimeout)
 	defer cancel()
@@ -234,6 +313,52 @@ func (h *HTTPHandler) listResults(w http.ResponseWriter, r *http.Request, id int
 		return
 	}
 	jsonResponse(w, http.StatusOK, detail.Results)
+}
+
+func decodeMonitorInput(r *http.Request) (model.MonitorInput, error) {
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		var in model.MonitorInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			return model.MonitorInput{}, err
+		}
+		return in, nil
+	}
+	if err := r.ParseForm(); err != nil {
+		return model.MonitorInput{}, err
+	}
+	return monitorInputFromForm(r)
+}
+
+func monitorInputFromForm(r *http.Request) (model.MonitorInput, error) {
+	interval, err := strconv.Atoi(strings.TrimSpace(r.FormValue("interval_seconds")))
+	if err != nil {
+		return model.MonitorInput{}, fmt.Errorf("invalid interval_seconds")
+	}
+	timeoutSec, err := strconv.Atoi(strings.TrimSpace(r.FormValue("timeout_seconds")))
+	if err != nil {
+		return model.MonitorInput{}, fmt.Errorf("invalid timeout_seconds")
+	}
+	return model.MonitorInput{
+		Name:            strings.TrimSpace(r.FormValue("name")),
+		URL:             strings.TrimSpace(r.FormValue("url")),
+		IntervalSeconds: interval,
+		TimeoutSeconds:  timeoutSec,
+		IsEnabled:       r.FormValue("is_enabled") == "on" || r.FormValue("is_enabled") == "true",
+	}, nil
+}
+
+func isHTMLRequest(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	contentType := r.Header.Get("Content-Type")
+	return strings.Contains(accept, "text/html") || strings.Contains(contentType, "application/x-www-form-urlencoded")
+}
+
+func (h *HTTPHandler) respondByContentType(w http.ResponseWriter, r *http.Request, code int, err error) {
+	if isHTMLRequest(r) {
+		http.Error(w, err.Error(), code)
+		return
+	}
+	jsonError(w, code, err)
 }
 
 func jsonResponse(w http.ResponseWriter, code int, v any) {

@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>monitor edit</title></head>
+<body>
+<p><a href="/monitors/{{.ID}}">←詳細へ戻る</a></p>
+<h1>監視対象の編集</h1>
+<form method="post" action="/monitors/{{.ID}}/update">
+  <label>名前: <input name="name" required value="{{.Name}}"></label><br>
+  <label>URL: <input name="url" type="url" required value="{{.URL}}"></label><br>
+  <label>チェック間隔(秒): <input name="interval_seconds" type="number" min="1" required value="{{.IntervalSeconds}}"></label><br>
+  <label>タイムアウト(秒): <input name="timeout_seconds" type="number" min="1" required value="{{.TimeoutSeconds}}"></label><br>
+  <label><input name="is_enabled" type="checkbox" {{if .IsEnabled}}checked{{end}}> 有効</label><br>
+  <button type="submit">更新</button>
+</form>
+</body></html>

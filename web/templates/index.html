@@ -3,9 +3,21 @@
 <head><meta charset="utf-8"><title>site-sentry-go</title></head>
 <body>
 <h1>Site Sentry</h1>
-<p>APIで登録・更新してください。フィルタ: <a href="/?status=">ALL</a> | <a href="/?status=UP">UP</a> | <a href="/?status=DOWN">DOWN</a></p>
+<p>フィルタ: <a href="/?status=">ALL</a> | <a href="/?status=UP">UP</a> | <a href="/?status=DOWN">DOWN</a></p>
+
+<h2>監視対象を追加</h2>
+<form method="post" action="/monitors">
+  <label>名前: <input name="name" required></label><br>
+  <label>URL: <input name="url" type="url" required placeholder="https://example.com"></label><br>
+  <label>チェック間隔(秒): <input name="interval_seconds" type="number" min="1" value="30" required></label><br>
+  <label>タイムアウト(秒): <input name="timeout_seconds" type="number" min="1" value="5" required></label><br>
+  <label><input name="is_enabled" type="checkbox" checked> 有効</label><br>
+  <button type="submit">追加</button>
+</form>
+
+<h2>監視対象一覧</h2>
 <table border="1" cellpadding="6">
-<tr><th>ID</th><th>Name</th><th>URL</th><th>Status</th><th>Code</th><th>Response(ms)</th><th>Last Checked</th><th>Fail Count</th><th>Error</th></tr>
+<tr><th>ID</th><th>Name</th><th>URL</th><th>Status</th><th>Code</th><th>Response(ms)</th><th>Last Checked</th><th>Fail Count</th><th>Error</th><th>操作</th></tr>
 {{range .Monitors}}
 <tr>
 <td><a href="/monitors/{{.ID}}">{{.ID}}</a></td>
@@ -16,6 +28,11 @@
 <td>{{if .LastCheckedAt}}{{.LastCheckedAt}}{{else}}-{{end}}</td>
 <td>{{.ConsecutiveFailure}}</td>
 <td>{{if .LastErrorMessage}}{{.LastErrorMessage}}{{else}}-{{end}}</td>
+<td>
+  <form method="post" action="/monitors/{{.ID}}/check" style="display:inline"><button type="submit">手動チェック</button></form>
+  <a href="/monitors/{{.ID}}/edit">編集</a>
+  <form method="post" action="/monitors/{{.ID}}/delete" style="display:inline" onsubmit="return confirm('削除しますか?');"><button type="submit">削除</button></form>
+</td>
 </tr>
 {{end}}
 </table>
