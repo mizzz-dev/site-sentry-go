@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: 8080
+      DB_PATH: /data/site_sentry.db
+    volumes:
+      - ./.data:/data
